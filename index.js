@@ -29,6 +29,7 @@ client.on('message', message => {
     console.log(`Command: '${command}'`);
 
     switch(command) {
+    case "mcap":
     case "marketcap":
     case "coinmarketcap":
 
@@ -37,6 +38,7 @@ client.on('message', message => {
 
         var market = '';
         var marketcap = '';
+        var totalmarketcap = 0;
 
         let match = message.content.match(new RegExp(/^.(\S+)\s*(.*)$/), '');
         console.log(match);
@@ -45,26 +47,24 @@ client.on('message', message => {
             promises.push(coinmarketcap.getMarketCaps()
                           .then(function(marketcaps) {
                               marketcap = marketcaps.slice(0, 10);
+                              totalmarketcap = _.reduce(marketcaps, function(sum, market) {
+                                  const mcap = parseInt(market['Market cap'].replace(/[$,]/g,''), 10);
+                                  if (isNaN(mcap)) return sum;
+                                  return sum + mcap;
+                              }, 0);
                           }));
 
             Promise.all(promises)
                 .then(function() {
 
-                    let marketData = []
-
-                    _.each(marketcap, function(market, index) {
-
+                    let marketData = _.reduce(marketcap, function(sum, market) {
                         // Limit this list to 10 entries
-                        if (index >= 10) return;
-
-                        marketData.push({name: `${market['Market cap rank']}. ${market['Currency']} (${market['Symbol']})`,
-                                         value: `Market cap: ${market['Market cap']}`});
-                    });
-
-                    var totalmarketcap = _.reduce(marketcap, function(sum, market) {
-                        return sum + parseInt(market['Market cap'].replace(/[$,]/g,''), 10);
-                    }, 0);
-
+                        if (sum.length >= 10) return sum;
+                        let mcap =  parseFloat(market['Market cap'].replace(/[$,]/g,''), 10) * 100;
+                        sum.push({name: `${market['Market cap rank']}. ${market['Currency']} (${market['Symbol']})`,
+                                  value: `Market cap: ${market['Market cap']} (${(mcap/totalmarketcap).toFixed(2)}%)`});
+                        return sum;
+                    }, []);
                     message.channel.send({embed: {
                         title: `Cryptocurrency market leaders`,
                         description: `Total crypto market cap: $${totalmarketcap.toLocaleString()}`,
@@ -75,6 +75,7 @@ client.on('message', message => {
         } else {
             // argument given: currency-lookup
             coin = match[2];
+            // TODO: respond to help
             console.log(`Coin: '${coin}'`);
 
             promises.push(coinmarketcap.getMarkets(coin)
@@ -83,8 +84,8 @@ client.on('message', message => {
                           }));
             promises.push(coinmarketcap.getMarketCap(coin)
                           .then(function(marketcaps) {
-                              marketcap = marketcaps[0]
-                              console.log(marketcaps[0]);
+                              // TODO: stop API from return a list of one
+                              marketcap = marketcaps[0];
                           }));
 
             // TODO: add error handling (coin not found)
@@ -92,20 +93,19 @@ client.on('message', message => {
             Promise.all(promises)
                 .then(function() {
 
-                    let marketData = []
-                    _.each(market, function(exchange, index) {
-
-                        const marketShare = parseFloat(exchange['Volume (%)'].split("%")[0]);
-
+                    let marketData = _.reduce(market, function(sum, data) {
+                        const marketShare = parseFloat(data['Volume (%)'].replace('%',''));
                         // Limit this list to 10 entries
-                        if (index >= 10) return;
+                        if (sum.length >= 10) return sum;
                         // Don't display dust entries (small market share)
-                        if (marketShare < 3) return;
+                        if (marketShare < 3) return sum;
 
-                        console.log(exchange);
-                        marketData.push({name: `${exchange['Exchange']}`,
-                                         value: `Pair: ${exchange['Pair']}\nVolume (%): ${exchange['Volume (%)']}\nPrice: ${exchange['Price']}`});
-                    });
+                        console.log(data);
+                        console.log(sum);
+                        sum.push({name: `${data['Exchange']}`,
+                                  value: `Pair: ${data['Pair']}\nVolume (%): ${data['Volume (%)']}\nPrice: ${data['Price']}`});
+                        return sum;
+                    }, []);
                     message.channel.send({embed: {
                         title: `${marketcap['Currency']} market leaders by volume`,
                         description: `Total market cap: ${marketcap['Market cap']}\nMarket cap rank: ${marketcap['Market cap rank']}`,
