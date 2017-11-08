@@ -51,6 +51,7 @@ client.on('message', message => {
                 .then(function() {
 
                     let marketData = []
+
                     _.each(marketcap, function(market, index) {
 
                         // Limit this list to 10 entries
@@ -60,9 +61,13 @@ client.on('message', message => {
                                          value: `Market cap: ${market['Market cap']}`});
                     });
 
-                    // TODO: add total market cap, of all coins.
+                    var totalmarketcap = _.reduce(marketcap, function(sum, market) {
+                        return sum + parseInt(market['Market cap'].replace(/[$,]/g,''), 10);
+                    }, 0);
+
                     message.channel.send({embed: {
                         title: `Cryptocurrency market leaders`,
+                        description: `Total crypto market cap: $${totalmarketcap.toLocaleString()}`,
                         url: `https://coinmarketcap.com/all/views/all/`,
                         fields: marketData
                     }});
