@@ -33,7 +33,7 @@ In discord
 ?marketcap bitcoin
 ```
 
-![Bot name is customizable](/img/demo.png?raw=true)
+<img src="/img/demo.png" alt="Bot name is customizable" height="500">
 
 ## Related
 
