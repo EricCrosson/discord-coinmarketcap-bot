@@ -2,6 +2,8 @@
 // Written by Eric Crosson
 // 2017-11-07
 
+'use strict;'
+
 const _ = require('lodash');
 const coinmarketcap = require('coinmarketcap-cli-api');
 const stripAnsi = require('strip-ansi');
@@ -14,7 +16,6 @@ const client = new Discord.Client();
 const config = require('./config.json');
 
 
-
 client.on('ready', () => {
     console.log('I am ready!');
 });
@@ -23,55 +24,92 @@ client.on('message', message => {
     if (!message.content.startsWith(config.prefix) || message.author.bot) return;
 
     console.log(`\nIncoming command: '${message.content}'`);
-    const match = message.content.match(new RegExp(/^.(.*?)\s(.*)$/), '');
+    let match = message.content.match(new RegExp(/^.(\S+).*$/), '');
     const command = match[1];
-    const coin = match[2];
     console.log(`Command: '${command}'`);
-    console.log(`Coin: '${coin}'`);
 
     switch(command) {
     case "marketcap":
     case "coinmarketcap":
 
-        market = '';
-        marketcap = '';
-        promises = [];
+        var promises = [];
+        var coin;
 
-        promises.push(coinmarketcap.getMarkets(coin)
-                      .then(function(markets) {
-                          market = markets
-                      }));
-        promises.push(coinmarketcap.getMarketCap(coin)
-                      .then(function(marketcaps) {
-                          marketcap = marketcaps[0]
-                      }));
+        var market = '';
+        var marketcap = '';
 
-        // TODO: add error handling (coin not found)
-        // TODO: host on a forever home
-        Promise.all(promises)
-            .then(function() {
+        let match = message.content.match(new RegExp(/^.(\S+)\s*(.*)$/), '');
+        console.log(match);
+        if (match[2] === '') {
+            // no arguments provided: list top 10 market caps
+            promises.push(coinmarketcap.getMarketCaps()
+                          .then(function(marketcaps) {
+                              marketcap = marketcaps.slice(0, 10);
+                          }));
 
-                var marketData = []
-                _.each(market, function(exchange, index) {
+            Promise.all(promises)
+                .then(function() {
 
-                    const marketShare = parseFloat(exchange['Volume (%)'].split("%")[0]);
+                    let marketData = []
+                    _.each(marketcap, function(market, index) {
 
-                    // Limit this list to 10 entries
-                    if (index >= 10) return;
-                    // Don't display dust entries (small market share)
-                    if (marketShare < 3) return;
+                        // Limit this list to 10 entries
+                        if (index >= 10) return;
 
-                    console.log(exchange);
-                    marketData.push({name: `${exchange['Exchange']}`,
-                                     value: `Pair: ${exchange['Pair']}\nVolume (%): ${exchange['Volume (%)']}\nPrice: ${exchange['Price']}`});
+                        marketData.push({name: `${market['Market cap rank']}. ${market['Currency']} (${market['Symbol']})`,
+                                         value: `Market cap: ${market['Market cap']}`});
+                    });
+
+                    // TODO: add total market cap, of all coins.
+                    message.channel.send({embed: {
+                        title: `Cryptocurrency market leaders`,
+                        url: `https://coinmarketcap.com/all/views/all/`,
+                        fields: marketData
+                    }});
                 });
-                message.channel.send({embed: {
-                    title: `${marketcap['Currency']} market leaders by volume`,
-                    description: `Total market cap: ${marketcap['Market cap']}`,
-                    url: `https://coinmarketcap.com/currencies/${marketcap['Currency'].toLowerCase().replace(/\s+/,'-')}/#markets`,
-                    fields: marketData
-                }});
-            })
+        } else {
+            // argument given: currency-lookup
+            coin = match[2];
+            console.log(`Coin: '${coin}'`);
+
+            promises.push(coinmarketcap.getMarkets(coin)
+                          .then(function(markets) {
+                              market = markets
+                          }));
+            promises.push(coinmarketcap.getMarketCap(coin)
+                          .then(function(marketcaps) {
+                              marketcap = marketcaps[0]
+                              console.log(marketcaps[0]);
+                          }));
+
+            // TODO: add error handling (coin not found)
+            // TODO: host on a forever home
+            Promise.all(promises)
+                .then(function() {
+
+                    let marketData = []
+                    _.each(market, function(exchange, index) {
+
+                        const marketShare = parseFloat(exchange['Volume (%)'].split("%")[0]);
+
+                        // Limit this list to 10 entries
+                        if (index >= 10) return;
+                        // Don't display dust entries (small market share)
+                        if (marketShare < 3) return;
+
+                        console.log(exchange);
+                        marketData.push({name: `${exchange['Exchange']}`,
+                                         value: `Pair: ${exchange['Pair']}\nVolume (%): ${exchange['Volume (%)']}\nPrice: ${exchange['Price']}`});
+                    });
+                    message.channel.send({embed: {
+                        title: `${marketcap['Currency']} market leaders by volume`,
+                        description: `Total market cap: ${marketcap['Market cap']}\nMarket cap rank: ${marketcap['Market cap rank']}`,
+                        url: `https://coinmarketcap.com/currencies/${marketcap['Currency'].toLowerCase().replace(/\s+/,'-')}/#markets`,
+                        fields: marketData
+                    }});
+                })
+        }
+
         break;
     }
 });
