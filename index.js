@@ -10,10 +10,14 @@ const stripAnsi = require('strip-ansi');
 const Table = require('markdown-table');
 const CliTable = require('cli-table2');
 const regexp_quote = require('regexp-quote');
+const imgur = require('imgur');
+const webshot = require('webshot');
 
 const Discord = require('discord.js');
 const client = new Discord.Client();
 const config = require('./config.json');
+
+const crypto_mkcap_dominance_png = 'crypto-mkcap-dominance.png';
 
 
 client.on('ready', () => {
@@ -25,6 +29,7 @@ client.on('message', message => {
 
     console.log(`\nIncoming command: '${message.content}'`);
     let match = message.content.match(new RegExp(/^.(\S+).*$/), '');
+    console.log(`Match: '${match}'`);
     const command = match[1];
     console.log(`Command: '${command}'`);
 
@@ -43,6 +48,9 @@ client.on('message', message => {
         let match = message.content.match(new RegExp(/^.(\S+)\s*(.*)$/), '');
         console.log(match);
         if (match[2] === '') {
+
+            let imageUrl = '';
+
             // no arguments provided: list top 10 market caps
             promises.push(coinmarketcap.getMarketCaps()
                           .then(function(marketcaps) {
@@ -54,23 +62,51 @@ client.on('message', message => {
                               }, 0);
                           }));
 
+            promises.push(new Promise(function(resolve, reject) {
+                let options = {
+                    shotSize: {
+                        width: 1000,
+                        height: 752
+                    },
+                    shotOffset: {
+                        left: 25,
+                        right: 0,
+                        top: 1650,
+                        bottom: 0
+                    }
+                };
+                webshot('https://coinmarketcap.com/charts/', crypto_mkcap_dominance_png, options, function(err) {
+                    if (err) {
+                        console.log('Error detected')
+                        console.log('Removing marketcap-dominance chart')
+                        reject();
+                    }
+                    // upload image to imgur
+                    imgur.uploadFile(crypto_mkcap_dominance_png)
+                        .then(function(json) {
+                            console.log(`Imgur link: ${json.data.link}`)
+                            imageUrl = json.data.link;
+                            resolve();
+                        }).catch(function(err) {
+                            console.log(err);
+                        });
+                })
+            }))
+
             Promise.all(promises)
                 .then(function() {
+                    let embed = new Discord.RichEmbed()
+                        .setTitle('Cryptocurrency market leaders')
+                        .setDescription(`Total crypto market cap: $${totalmarketcap.toLocaleString()}`)
+                        .setURL('https://coinmarketcap.com/all/views/all/')
 
-                    let marketData = _.reduce(marketcap, function(sum, market) {
-                        // Limit this list to 10 entries
-                        if (sum.length >= 10) return sum;
-                        let mcap =  parseFloat(market['Market cap'].replace(/[$,]/g,''), 10) * 100;
-                        sum.push({name: `${market['Market cap rank']}. ${market['Currency']} (${market['Symbol']})`,
-                                  value: `Market cap: ${market['Market cap']} (${(mcap/totalmarketcap).toFixed(2)}%)`});
-                        return sum;
-                    }, []);
-                    message.channel.send({embed: {
-                        title: `Cryptocurrency market leaders`,
-                        description: `Total crypto market cap: $${totalmarketcap.toLocaleString()}`,
-                        url: `https://coinmarketcap.com/all/views/all/`,
-                        fields: marketData
-                    }});
+                    _.each(marketcap, (market) => {
+                        let mcap = parseFloat(market['Market cap'].replace(/[$,]/g,''), 10) * 100;
+                        embed.addField(`${market['Market cap rank']}. ${market['Currency']} (${market['Symbol']})`,
+                                       `Market cap: ${market['Market cap']} (${(mcap/totalmarketcap).toFixed(2)}%)`)
+                    })
+                    embed.setImage(imageUrl)
+                    message.channel.send({embed});
                 });
         } else {
             // argument given: currency-lookup
@@ -79,14 +115,10 @@ client.on('message', message => {
             console.log(`Coin: '${coin}'`);
 
             promises.push(coinmarketcap.getMarkets(coin)
-                          .then(function(markets) {
-                              market = markets
-                          }));
+                          .then(function(markets) {market = markets}));
+            // TODO: stop API from return a list of one
             promises.push(coinmarketcap.getMarketCap(coin)
-                          .then(function(marketcaps) {
-                              // TODO: stop API from return a list of one
-                              marketcap = marketcaps[0];
-                          }));
+                          .then(function(marketcaps) {marketcap = marketcaps[0];}));
 
             // TODO: add error handling (coin not found)
             // TODO: host on a forever home
