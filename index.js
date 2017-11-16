@@ -15,6 +15,7 @@ const config = require('./config.json');
 
 const crypto_mkcap_dominance_png = 'crypto-mkcap-dominance.png';
 
+// TODO: why does input 'eth' not work? something's getting snagged
 // TODO: refactor the photo-fetching into the coinmarketcap-api library
 
 
